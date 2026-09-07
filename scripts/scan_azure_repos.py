@@ -155,10 +155,10 @@ def scan_repository(repo_path: Path, num_cores: int) -> tuple[str, int, str]:
         [
             "detect-secrets",
             "scan",
+            "-c",
+            str(num_cores),
             "--baseline",
             ".secrets.baseline",
-            "--num-cores",
-            str(num_cores),
         ],
         cwd=repo_path,
     )
