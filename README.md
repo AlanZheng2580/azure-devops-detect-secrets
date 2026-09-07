@@ -24,6 +24,37 @@ The job stops immediately with a configuration error when the secret `AZURE_DEVO
 
 Proxy and TLS options are passed only to the scanner's HTTP client and Git process. The pipeline does not change the agent-wide `git config --system` settings.
 
+## Run locally
+
+Run the following from the repository root. The silent prompt keeps the PAT out of shell history and terminal output:
+
+```bash
+python3 -m venv /tmp/azure-repo-secret-scan-venv
+. /tmp/azure-repo-secret-scan-venv/bin/activate
+python -m pip install "detect-secrets==1.5.0"
+
+read -rsp "Azure DevOps PAT: " queue_pat
+printf '\n'
+export AZURE_DEVOPS_PAT="$queue_pat"
+unset queue_pat
+
+export AZURE_DEVOPS_ORG_URL="https://dev.azure.com/tsmcit/"
+export AZURE_DEVOPS_PROJECTS="EPS,HCM,Dig Work"
+export REPO_ALLOWLIST="repo-to-skip,EPS/project-specific-repo"
+export AZURE_DEVOPS_PROXY="http://saas-proxy.psp.svc.cluster.local:30080"
+export AZURE_DEVOPS_SSL_VERIFY="false"
+export DETECT_SECRETS_NUM_CORES="2"
+export REPORT_DIR="$PWD/secret-scan-report"
+
+chmod 700 scripts/git_askpass.sh
+python scripts/scan_azure_repos.py
+
+unset AZURE_DEVOPS_PAT
+deactivate
+```
+
+For a direct connection, use `export AZURE_DEVOPS_PROXY=""`. If the internal CA is trusted locally, use `export AZURE_DEVOPS_SSL_VERIFY="true"`. Reports are written to `secret-scan-report/report.md` and `secret-scan-report/report.json`; exit code `1` means at least one repository requires attention.
+
 ## Output and status
 
 The `secret-scan-report` pipeline artifact contains both `report.md` and machine-readable `report.json`. A repository is assigned one of these statuses:
