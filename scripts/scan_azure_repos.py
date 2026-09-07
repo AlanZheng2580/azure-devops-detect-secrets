@@ -26,6 +26,12 @@ def split_setting(value: str) -> list[str]:
     return [item.strip() for item in re.split(r"[,\n]", value) if item.strip()]
 
 
+def safe_path_component(value: str) -> str:
+    """Keep the Azure name recognizable without allowing it to escape the work tree."""
+    component = re.sub(r"[\\/]", "_", value).strip()
+    return component if component not in {"", ".", ".."} else "_"
+
+
 def api_get(url: str, pat: str) -> tuple[Any, str | None]:
     token = base64.b64encode(f":{pat}".encode()).decode()
     request = urllib.request.Request(
@@ -159,8 +165,11 @@ def main() -> int:
     projects = split_setting(os.environ.get("AZURE_DEVOPS_PROJECTS", ""))
     allowlist = set(split_setting(os.environ.get("REPO_ALLOWLIST", "")))
     report_dir = Path(os.environ.get("REPORT_DIR", "secret-scan-report")).resolve()
-    if not pat or not org_url or not projects:
-        print("AZURE_DEVOPS_PAT, AZURE_DEVOPS_ORG_URL, and AZURE_DEVOPS_PROJECTS are required", file=sys.stderr)
+    if not pat or pat == "$(AZURE_DEVOPS_PAT)":
+        print("##vso[task.logissue type=error]AZURE_DEVOPS_PAT is required and must be configured as a secret pipeline variable")
+        return 2
+    if not org_url or not projects:
+        print("##vso[task.logissue type=error]AZURE_DEVOPS_ORG_URL and AZURE_DEVOPS_PROJECTS are required")
         return 2
 
     results: list[dict[str, Any]] = []
@@ -168,6 +177,8 @@ def main() -> int:
         work_root = Path(temp)
         for project in projects:
             print(f"##[group]Project: {project}")
+            project_root = work_root / safe_path_component(project)
+            project_root.mkdir(parents=True, exist_ok=True)
             try:
                 repositories = list_repositories(org_url, project, pat)
             except Exception as error:
@@ -176,7 +187,7 @@ def main() -> int:
                 print("##[endgroup]")
                 continue
 
-            for index, repo in enumerate(repositories):
+            for repo in repositories:
                 name = repo["name"]
                 qualified_name = f"{project}/{name}"
                 if name in allowlist or qualified_name in allowlist:
@@ -186,7 +197,7 @@ def main() -> int:
                 elif not repo.get("defaultBranch"):
                     status, count, detail = "skipped", 0, "Repository is empty or has no default branch"
                 else:
-                    repo_path = work_root / f"repo-{len(results)}-{index}"
+                    repo_path = project_root / safe_path_component(name)
                     try:
                         clone_repository(repo, repo_path, pat)
                         status, count, detail = scan_repository(repo_path)
@@ -211,4 +222,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

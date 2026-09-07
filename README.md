@@ -2,6 +2,8 @@
 
 This pipeline enumerates every repository in selected Azure DevOps projects, skips an optional allowlist, checks for a root-level `.secrets.baseline`, and runs `detect-secrets scan --baseline .secrets.baseline`. It fails when a baseline is missing, a new finding appears, an API/clone/scan fails, or the baseline is invalid.
 
+Repositories are cloned temporarily using a `<project>/<repository>` directory layout. For example, repositories returned from `https://dev.azure.com/tsmcit/EPS/` are placed under `<temporary-directory>/EPS/<repository>`. The temporary tree is removed as each scan completes.
+
 ## Azure DevOps setup
 
 1. Create a PAT with read-only **Code** access to all projects that will be scanned. If the projects are in another organization, also set `AZURE_DEVOPS_ORG_URL` to that organization's URL instead of using `$(System.CollectionUri)`.
@@ -12,6 +14,8 @@ This pipeline enumerates every repository in selected Azure DevOps projects, ski
 4. Ensure the pipeline's default branch matches the `main` branch in the schedule. Azure DevOps only evaluates scheduled triggers from the YAML version on the configured default branch.
 
 The sample cron runs every day at 21:00 Asia/Taipei (`13:00 UTC`). Azure Pipelines cron schedules always use UTC.
+
+The job stops immediately with a configuration error when the secret `AZURE_DEVOPS_PAT` variable is missing. Git receives the PAT through `scripts/git_askpass.sh`; this avoids embedding the credential in the clone URL or command-line arguments where it could be logged.
 
 ## Output and status
 
