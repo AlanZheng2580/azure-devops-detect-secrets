@@ -35,6 +35,8 @@ steps:
 
   - bash: |
       set -euo pipefail
+      chmod 700 scripts/git_askpass.sh
+      test -x scripts/git_askpass.sh
       python -m pip install --disable-pip-version-check "detect-secrets==$(DETECT_SECRETS_VERSION)"
       python scripts/scan_azure_repos.py
     displayName: Scan Azure Repos

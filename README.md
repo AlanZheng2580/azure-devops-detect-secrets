@@ -17,7 +17,7 @@ Repositories are cloned temporarily using a `<project>/<repository>` directory l
 
 The sample cron runs every day at 21:00 Asia/Taipei (`13:00 UTC`). Azure Pipelines cron schedules always use UTC.
 
-The job stops immediately with a configuration error when the secret `AZURE_DEVOPS_PAT` variable is missing. Git receives the PAT through `scripts/git_askpass.sh`; this avoids embedding the credential in the clone URL or command-line arguments where it could be logged.
+The job stops immediately with a configuration error when the secret `AZURE_DEVOPS_PAT` variable is missing. Git receives the PAT through `scripts/git_askpass.sh`; this avoids embedding the credential in the clone URL or command-line arguments where it could be logged. The pipeline explicitly sets the helper's executable permission before scanning.
 
 Proxy and TLS options are passed only to the scanner's HTTP client and Git process. The pipeline does not change the agent-wide `git config --system` settings.
 

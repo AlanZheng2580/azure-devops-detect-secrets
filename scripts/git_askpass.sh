@@ -6,4 +6,3 @@ case "${1:-}" in
   *Password*) printf '%s\n' "${AZURE_DEVOPS_PAT:?AZURE_DEVOPS_PAT is required}" ;;
   *) exit 1 ;;
 esac
-
