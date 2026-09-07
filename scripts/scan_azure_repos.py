@@ -154,9 +154,9 @@ def scan_repository(repo_path: Path, num_cores: int) -> tuple[str, int, str]:
     result = run(
         [
             "detect-secrets",
-            "scan",
             "-c",
             str(num_cores),
+            "scan",
             "--baseline",
             ".secrets.baseline",
         ],

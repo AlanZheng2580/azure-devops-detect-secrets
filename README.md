@@ -14,6 +14,8 @@ Repositories are cloned temporarily using a `<project>/<repository>` directory l
    - `AZURE_DEVOPS_PROXY`: proxy used by both the REST API and `git clone`; leave empty for a direct connection.
    - `AZURE_DEVOPS_SSL_VERIFY`: controls TLS certificate verification for both REST and Git. Prefer `true` with the internal CA installed. The supplied TSMC proxy example uses `false`.
    - `DETECT_SECRETS_NUM_CORES`: maximum multiprocessing workers used by each scan; defaults to `2`.
+
+The worker limit is passed as a global option before the subcommand: `detect-secrets -c 2 scan --baseline .secrets.baseline`.
 4. Ensure the pipeline's default branch matches the `main` branch in the schedule. Azure DevOps only evaluates scheduled triggers from the YAML version on the configured default branch.
 
 The sample cron runs every day at 21:00 Asia/Taipei (`13:00 UTC`). Azure Pipelines cron schedules always use UTC.
