@@ -61,15 +61,28 @@ def list_repositories(
     base_url = f"{org_url.rstrip('/')}/{project_path}/_apis/git/repositories"
     repositories: list[dict[str, Any]] = []
     continuation: str | None = None
+    page = 0
+    print(f"Listing repositories for project {project} from {base_url}", flush=True)
     while True:
+        page += 1
         query = {"api-version": API_VERSION, "$top": "1000"}
         if continuation:
             query["continuationToken"] = continuation
         payload, continuation = api_get(
             f"{base_url}?{urllib.parse.urlencode(query)}", pat, proxy, ssl_verify
         )
-        repositories.extend(payload.get("value", []))
+        page_repositories = payload.get("value", [])
+        repositories.extend(page_repositories)
+        print(
+            f"Listed page {page} for project {project}: "
+            f"{len(page_repositories)} repo(s), {len(repositories)} total",
+            flush=True,
+        )
         if not continuation:
+            print(
+                f"Finished listing project {project}: {len(repositories)} repo(s)",
+                flush=True,
+            )
             return repositories
 
 
