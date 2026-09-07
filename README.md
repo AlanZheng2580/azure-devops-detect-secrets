@@ -11,11 +11,15 @@ Repositories are cloned temporarily using a `<project>/<repository>` directory l
 3. Edit these variables in `azure-pipelines.yml`, or override them in the pipeline UI/variable group:
    - `AZURE_DEVOPS_PROJECTS`: comma/newline separated project names, for example `EPS,HCM,Dig Work`.
    - `REPO_ALLOWLIST`: comma/newline separated entries. `repo-a` skips that repo name in every project; `EPS/repo-a` only skips it in EPS.
+   - `AZURE_DEVOPS_PROXY`: proxy used by both the REST API and `git clone`; leave empty for a direct connection.
+   - `AZURE_DEVOPS_SSL_VERIFY`: controls TLS certificate verification for both REST and Git. Prefer `true` with the internal CA installed. The supplied TSMC proxy example uses `false`.
 4. Ensure the pipeline's default branch matches the `main` branch in the schedule. Azure DevOps only evaluates scheduled triggers from the YAML version on the configured default branch.
 
 The sample cron runs every day at 21:00 Asia/Taipei (`13:00 UTC`). Azure Pipelines cron schedules always use UTC.
 
 The job stops immediately with a configuration error when the secret `AZURE_DEVOPS_PAT` variable is missing. Git receives the PAT through `scripts/git_askpass.sh`; this avoids embedding the credential in the clone URL or command-line arguments where it could be logged.
+
+Proxy and TLS options are passed only to the scanner's HTTP client and Git process. The pipeline does not change the agent-wide `git config --system` settings.
 
 ## Output and status
 

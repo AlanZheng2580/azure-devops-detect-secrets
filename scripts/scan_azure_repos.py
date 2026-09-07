@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -32,14 +33,20 @@ def safe_path_component(value: str) -> str:
     return component if component not in {"", ".", ".."} else "_"
 
 
-def api_get(url: str, pat: str) -> tuple[Any, str | None]:
+def api_get(url: str, pat: str, proxy: str, ssl_verify: bool) -> tuple[Any, str | None]:
     token = base64.b64encode(f":{pat}".encode()).decode()
     request = urllib.request.Request(
         url,
         headers={"Authorization": f"Basic {token}", "Accept": "application/json"},
     )
+    handlers: list[Any] = []
+    if proxy:
+        handlers.append(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+    if not ssl_verify:
+        handlers.append(urllib.request.HTTPSHandler(context=ssl._create_unverified_context()))
+    opener = urllib.request.build_opener(*handlers)
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with opener.open(request, timeout=60) as response:
             continuation = response.headers.get("x-ms-continuationtoken")
             return json.load(response), continuation
     except urllib.error.HTTPError as error:
@@ -47,7 +54,9 @@ def api_get(url: str, pat: str) -> tuple[Any, str | None]:
         raise RuntimeError(f"Azure DevOps API returned HTTP {error.code}: {detail}") from error
 
 
-def list_repositories(org_url: str, project: str, pat: str) -> list[dict[str, Any]]:
+def list_repositories(
+    org_url: str, project: str, pat: str, proxy: str, ssl_verify: bool
+) -> list[dict[str, Any]]:
     project_path = urllib.parse.quote(project, safe="")
     base_url = f"{org_url.rstrip('/')}/{project_path}/_apis/git/repositories"
     repositories: list[dict[str, Any]] = []
@@ -56,7 +65,9 @@ def list_repositories(org_url: str, project: str, pat: str) -> list[dict[str, An
         query = {"api-version": API_VERSION, "$top": "1000"}
         if continuation:
             query["continuationToken"] = continuation
-        payload, continuation = api_get(f"{base_url}?{urllib.parse.urlencode(query)}", pat)
+        payload, continuation = api_get(
+            f"{base_url}?{urllib.parse.urlencode(query)}", pat, proxy, ssl_verify
+        )
         repositories.extend(payload.get("value", []))
         if not continuation:
             return repositories
@@ -89,12 +100,24 @@ def run(command: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> 
     )
 
 
-def clone_repository(repo: dict[str, Any], destination: Path, pat: str) -> None:
+def clone_repository(
+    repo: dict[str, Any],
+    destination: Path,
+    pat: str,
+    org_url: str,
+    proxy: str,
+    ssl_verify: bool,
+) -> None:
     env = os.environ.copy()
     env["AZURE_DEVOPS_PAT"] = pat
     env["GIT_TERMINAL_PROMPT"] = "0"
     env["GIT_ASKPASS"] = str(Path(__file__).with_name("git_askpass.sh").resolve())
-    command = ["git", "clone", "--quiet", "--depth", "1", "--no-tags"]
+    command = ["git"]
+    git_url = org_url.rstrip("/")
+    if proxy:
+        command.extend(["-c", f"http.{git_url}.proxy={proxy}"])
+    command.extend(["-c", f"http.{git_url}.sslVerify={'true' if ssl_verify else 'false'}"])
+    command.extend(["clone", "--quiet", "--depth", "1", "--no-tags"])
     default_branch = repo.get("defaultBranch")
     if default_branch:
         command.extend(["--branch", default_branch.removeprefix("refs/heads/")])
@@ -164,6 +187,10 @@ def main() -> int:
     org_url = os.environ.get("AZURE_DEVOPS_ORG_URL", "")
     projects = split_setting(os.environ.get("AZURE_DEVOPS_PROJECTS", ""))
     allowlist = set(split_setting(os.environ.get("REPO_ALLOWLIST", "")))
+    proxy = os.environ.get("AZURE_DEVOPS_PROXY", "").strip()
+    ssl_verify = os.environ.get("AZURE_DEVOPS_SSL_VERIFY", "true").strip().lower() not in {
+        "0", "false", "no", "off"
+    }
     report_dir = Path(os.environ.get("REPORT_DIR", "secret-scan-report")).resolve()
     if not pat or pat == "$(AZURE_DEVOPS_PAT)":
         print("##vso[task.logissue type=error]AZURE_DEVOPS_PAT is required and must be configured as a secret pipeline variable")
@@ -181,7 +208,7 @@ def main() -> int:
             project_root = work_root / safe_path_component(project)
             project_root.mkdir(parents=True, exist_ok=True)
             try:
-                repositories = list_repositories(org_url, project, pat)
+                repositories = list_repositories(org_url, project, pat, proxy, ssl_verify)
             except Exception as error:
                 print(f"##[error]{error}")
                 results.append({"project": project, "repository": "*", "status": "scan_error", "newFindings": 0, "detail": str(error)})
@@ -201,7 +228,7 @@ def main() -> int:
                     repo_path = project_root / safe_path_component(name)
                     try:
                         print(f"Cloning {qualified_name} to {repo_path}", flush=True)
-                        clone_repository(repo, repo_path, pat)
+                        clone_repository(repo, repo_path, pat, org_url, proxy, ssl_verify)
                         print(f"Scanning {qualified_name} in {repo_path}", flush=True)
                         status, count, detail = scan_repository(repo_path)
                     except Exception as error:
