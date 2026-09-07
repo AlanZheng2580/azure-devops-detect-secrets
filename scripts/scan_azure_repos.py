@@ -175,6 +175,7 @@ def main() -> int:
     results: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="azure-repo-secret-scan-") as temp:
         work_root = Path(temp)
+        print(f"Work root: {work_root}", flush=True)
         for project in projects:
             print(f"##[group]Project: {project}")
             project_root = work_root / safe_path_component(project)
@@ -199,12 +200,15 @@ def main() -> int:
                 else:
                     repo_path = project_root / safe_path_component(name)
                     try:
+                        print(f"Cloning {qualified_name} to {repo_path}", flush=True)
                         clone_repository(repo, repo_path, pat)
+                        print(f"Scanning {qualified_name} in {repo_path}", flush=True)
                         status, count, detail = scan_repository(repo_path)
                     except Exception as error:
                         status, count, detail = "scan_error", 0, str(error)
                     finally:
                         if repo_path.exists():
+                            print(f"Cleaning up {qualified_name} from {repo_path}", flush=True)
                             shutil.rmtree(repo_path)
 
                 print(f"{qualified_name}: {status} - {detail}")
