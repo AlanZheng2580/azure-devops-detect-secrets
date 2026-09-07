@@ -1,0 +1,52 @@
+trigger: none
+pr: none
+
+schedules:
+  # Azure Pipelines cron is UTC. 13:00 UTC = 21:00 Asia/Taipei.
+  - cron: "0 13 * * *"
+    displayName: Nightly secret scan
+    branches:
+      include:
+        - main
+    always: true
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  # Comma or newline separated Azure DevOps project names. Spaces are supported.
+  AZURE_DEVOPS_PROJECTS: "EPS,HCM,Dig Work"
+  # Match either "repo-name" (all projects) or "project/repo-name".
+  # Keep this empty when no repositories should be excluded.
+  REPO_ALLOWLIST: ""
+  DETECT_SECRETS_VERSION: "1.5.0"
+
+steps:
+  - checkout: self
+    clean: true
+
+  - task: UsePythonVersion@0
+    displayName: Use Python 3.12
+    inputs:
+      versionSpec: "3.12"
+
+  - bash: |
+      set -euo pipefail
+      python -m pip install --disable-pip-version-check "detect-secrets==$(DETECT_SECRETS_VERSION)"
+      python scripts/scan_azure_repos.py
+    displayName: Scan Azure Repos
+    env:
+      AZURE_DEVOPS_PAT: $(AZURE_DEVOPS_PAT)
+      AZURE_DEVOPS_ORG_URL: $(System.CollectionUri)
+      AZURE_DEVOPS_PROJECTS: $(AZURE_DEVOPS_PROJECTS)
+      REPO_ALLOWLIST: $(REPO_ALLOWLIST)
+      REPORT_DIR: $(Build.ArtifactStagingDirectory)/secret-scan-report
+
+  - task: PublishPipelineArtifact@1
+    displayName: Publish secret scan report
+    condition: always()
+    inputs:
+      targetPath: $(Build.ArtifactStagingDirectory)/secret-scan-report
+      artifact: secret-scan-report
+      publishLocation: pipeline
+
