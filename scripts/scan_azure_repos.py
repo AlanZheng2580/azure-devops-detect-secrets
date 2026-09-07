@@ -140,7 +140,7 @@ def clone_repository(
         raise RuntimeError(result.stdout.strip() or "git clone failed")
 
 
-def scan_repository(repo_path: Path) -> tuple[str, int, str]:
+def scan_repository(repo_path: Path, num_cores: int) -> tuple[str, int, str]:
     baseline = repo_path / ".secrets.baseline"
     if not baseline.is_file():
         return "missing_baseline", 0, "Repository root has no .secrets.baseline"
@@ -151,7 +151,17 @@ def scan_repository(repo_path: Path) -> tuple[str, int, str]:
         return "scan_error", 0, f"Invalid .secrets.baseline: {error}"
 
     # This updates the working-copy baseline; the repository itself is never pushed.
-    result = run(["detect-secrets", "scan", "--baseline", ".secrets.baseline"], cwd=repo_path)
+    result = run(
+        [
+            "detect-secrets",
+            "scan",
+            "--baseline",
+            ".secrets.baseline",
+            "--num-cores",
+            str(num_cores),
+        ],
+        cwd=repo_path,
+    )
     if result.returncode != 0:
         return "scan_error", 0, result.stdout.strip()
 
@@ -204,6 +214,7 @@ def main() -> int:
     ssl_verify = os.environ.get("AZURE_DEVOPS_SSL_VERIFY", "true").strip().lower() not in {
         "0", "false", "no", "off"
     }
+    num_cores_value = os.environ.get("DETECT_SECRETS_NUM_CORES", "2").strip()
     report_dir = Path(os.environ.get("REPORT_DIR", "secret-scan-report")).resolve()
     if not pat or pat == "$(AZURE_DEVOPS_PAT)":
         print("##vso[task.logissue type=error]AZURE_DEVOPS_PAT is required and must be configured as a secret pipeline variable")
@@ -211,11 +222,19 @@ def main() -> int:
     if not org_url or not projects:
         print("##vso[task.logissue type=error]AZURE_DEVOPS_ORG_URL and AZURE_DEVOPS_PROJECTS are required")
         return 2
+    try:
+        num_cores = int(num_cores_value)
+        if num_cores < 1:
+            raise ValueError
+    except ValueError:
+        print("##vso[task.logissue type=error]DETECT_SECRETS_NUM_CORES must be a positive integer")
+        return 2
 
     results: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="azure-repo-secret-scan-") as temp:
         work_root = Path(temp)
         print(f"Work root: {work_root}", flush=True)
+        print(f"detect-secrets worker processes: {num_cores}", flush=True)
         for project in projects:
             print(f"##[group]Project: {project}")
             project_root = work_root / safe_path_component(project)
@@ -242,8 +261,11 @@ def main() -> int:
                     try:
                         print(f"Cloning {qualified_name} to {repo_path}", flush=True)
                         clone_repository(repo, repo_path, pat, org_url, proxy, ssl_verify)
-                        print(f"Scanning {qualified_name} in {repo_path}", flush=True)
-                        status, count, detail = scan_repository(repo_path)
+                        print(
+                            f"Scanning {qualified_name} in {repo_path} with {num_cores} worker(s)",
+                            flush=True,
+                        )
+                        status, count, detail = scan_repository(repo_path, num_cores)
                     except Exception as error:
                         status, count, detail = "scan_error", 0, str(error)
                     finally:

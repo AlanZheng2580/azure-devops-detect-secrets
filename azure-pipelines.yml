@@ -20,6 +20,7 @@ variables:
   # Keep this empty when no repositories should be excluded.
   REPO_ALLOWLIST: ""
   DETECT_SECRETS_VERSION: "1.5.0"
+  DETECT_SECRETS_NUM_CORES: "2"
   AZURE_DEVOPS_PROXY: "http://saas-proxy.psp.svc.cluster.local:30080"
   # Prefer installing the internal CA and setting this to true when possible.
   AZURE_DEVOPS_SSL_VERIFY: "false"
@@ -47,6 +48,7 @@ steps:
       REPO_ALLOWLIST: $(REPO_ALLOWLIST)
       AZURE_DEVOPS_PROXY: $(AZURE_DEVOPS_PROXY)
       AZURE_DEVOPS_SSL_VERIFY: $(AZURE_DEVOPS_SSL_VERIFY)
+      DETECT_SECRETS_NUM_CORES: $(DETECT_SECRETS_NUM_CORES)
       REPORT_DIR: $(Build.ArtifactStagingDirectory)/secret-scan-report
 
   - task: PublishPipelineArtifact@1
