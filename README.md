@@ -66,3 +66,8 @@ The `secret-scan-report` pipeline artifact contains both `report.md` and machine
 - `skipped`: allowlisted, disabled, or empty repository.
 
 The scan never commits or pushes the baseline updated in its temporary working copy.
+
+## Count Unique Secrets
+```bash
+jq -r '.results | to_entries[] | .key as $filename | .value[] | [$filename, .type, .hashed_secret] | @tsv' .secrets.baseline | wc -l
+```
